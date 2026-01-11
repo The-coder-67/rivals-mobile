@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RIVALS Mobile</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; touch-action: none; font-family: sans-serif; }
+        #ui { position: absolute; top: 10px; width: 100%; text-align: center; color: white; font-weight: bold; pointer-events: none; text-shadow: 2px 2px 4px #000; z-index: 10; }
+        #joystick-container { position: absolute; bottom: 40px; left: 40px; width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); }
+        #joystick-knob { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: #fff; border-radius: 50%; opacity: 0.8; }
+        #fire-button { position: absolute; bottom: 50px; right: 40px; width: 80px; height: 80px; background: rgba(255, 0, 0, 0.6); border: 4px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; user-select: none; -webkit-tap-highlight-color: transparent; z-index: 10; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; }
+    </style>
+</head>
+<body>
+    <div id="ui">SCORE: <span id="score">0</span></div>
+    <div id="crosshair"></div>
+    <div id="joystick-container"><div id="joystick-knob"></div></div>
+    <div id="fire-button">FIRE</div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
+        scene.add(light);
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshPhongMaterial({ color: 0x333333 }));
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+        let score = 0;
+        const targets = [];
+        function spawnTarget() {
+            const target = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshPhongMaterial({ color: 0xff0000 }));
+            target.position.set((Math.random()-0.5)*40, 1, (Math.random()-0.5)*40);
+            scene.add(target);
+            targets.push(target);
+        }
+        for(let i=0; i<8; i++) spawnTarget();
+        let moveDir = { x: 0, z: 0 };
+        let lookRotation = { y: 0, x: 0 };
+        const knob = document.getElementById('joystick-knob');
+        const container = document.getElementById('joystick-container');
+        container.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            const rect = container.getBoundingClientRect();
+            const dx = touch.clientX - (rect.left + rect.width/2);
+            const dy = touch.clientY - (rect.top + rect.height/2);
+            const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 40);
+            const angle = Math.atan2(dy, dx);
+            knob.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
+            moveDir.x = (Math.cos(angle) * dist) / 40;
+            moveDir.z = (Math.sin(angle) * dist) / 40;
+        });
+        container.addEventListener('touchend', () => {
+            knob.style.transform = `translate(0,0)`;
+            moveDir = { x: 0, z: 0 };
+        });
+        let lastTouchX = 0, lastTouchY = 0;
+        window.addEventListener('touchstart', (e) => {
+            if(e.touches[0].clientX > window.innerWidth / 2) {
+                lastTouchX = e.touches[0].clientX;
+                lastTouchY = e.touches[0].clientY;
+            }
+        });
+        window.addEventListener('touchmove', (e) => {
+            const touch = Array.from(e.touches).find(t => t.clientX > window.innerWidth / 2);
+            if(touch) {
+                lookRotation.y -= (touch.clientX - lastTouchX) * 0.005;
+                lookRotation.x -= (touch.clientY - lastTouchY) * 0.005;
+                lookRotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, lookRotation.x));
+                lastTouchX = touch.clientX; lastTouchY = touch.clientY;
+            }
+        });
+        document.getElementById('fire-button').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+            const hits = raycaster.intersectObjects(targets);
+            if(hits.length > 0) {
+                scene.remove(hits[0].object);
+                targets.splice(targets.indexOf(hits[0].object), 1);
+                score++;
+                document.getElementById('score').innerText = score;
+                spawnTarget();
+            }
+        });
+        function animate() {
+            requestAnimationFrame(animate);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.y = lookRotation.y;
+            camera.rotation.x = lookRotation.x;
+            const forward = new THREE
+      
